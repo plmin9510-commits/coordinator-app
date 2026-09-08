@@ -444,6 +444,44 @@
     .active-users-empty{padding:22px;text-align:center;color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:16px;font-weight:800;}
     .summary-card.clickable .summary-sub:after{content:" · 명단 보기";color:#2563eb;font-weight:900;}
 
+
+
+    /* step38: 관리자페이지 직관형/최적화 레이아웃 */
+    :root{--step38-blue:#2563eb;--step38-navy:#0f172a;--step38-soft:#f8fafc;}
+    body{background:#f6f8fc;}
+    .container{max-width:1500px;padding-top:18px;}
+    .hero{padding:22px 24px;margin-bottom:14px;border-radius:22px;background:linear-gradient(135deg,#1e40af 0%,#2563eb 55%,#0f766e 100%);}
+    .hero h2{font-size:24px;margin-bottom:4px;}
+    .hero p{font-size:14px;}
+    .step38-usage-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 16px;}
+    .step38-section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 10px;font-size:18px;font-weight:900;color:#0f172a;letter-spacing:-.02em;}
+    .summary-grid{grid-template-columns:repeat(6,minmax(0,1fr)) !important;gap:10px;margin-bottom:14px;}
+    .summary-card{min-height:106px;border-radius:18px;padding:14px;box-shadow:0 8px 24px rgba(15,23,42,.05);}
+    .summary-value{font-size:20px;}
+    .month-query-panel{border-radius:18px;margin-bottom:12px;padding:15px 16px;box-shadow:0 8px 24px rgba(37,99,235,.06);}
+    .filter-redesign-panel{border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.05);}
+    .filter-main-grid{grid-template-columns:1fr 1fr !important;}
+    .filter-card{border-radius:16px;box-shadow:none;}
+    .search-card{grid-template-columns:1fr !important;}
+    .table-panel{border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.05);}
+    .table-wrap{max-height:620px;overflow:auto;}
+    table{min-width:1080px;}
+    thead th{top:0;background:#f1f5f9;}
+    .table-pager{align-items:center;justify-content:center;gap:10px;padding:14px 16px;border-top:1px solid #e2e8f0;background:#f8fafc;}
+    .table-pager button:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+    .table-pager-info{font-size:13px;font-weight:900;color:#334155;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:8px 12px;}
+    .three-col{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:12px !important;margin-top:14px !important;}
+    .three-col > .panel{border-radius:18px;box-shadow:0 8px 20px rgba(15,23,42,.04);}
+    .three-col .panel-head{min-height:auto;padding:14px 16px 12px;}
+    .three-col .panel-body{max-height:320px;overflow:auto;padding:14px 16px;}
+    .inactive-user-panel,.today-active-panel{margin:0;border-radius:18px;box-shadow:0 8px 24px rgba(15,23,42,.05);}
+    .step38-management-title{margin:20px 0 10px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:18px;background:#ffffff;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+    .step38-management-title strong{font-size:18px;color:#0f172a;}
+    .step38-management-title span{font-size:13px;color:#64748b;font-weight:700;}
+    @media(max-width:1200px){.summary-grid{grid-template-columns:repeat(3,1fr) !important}.step38-usage-grid{grid-template-columns:1fr}.three-col{grid-template-columns:1fr !important}}
+    @media(max-width:760px){.summary-grid{grid-template-columns:1fr 1fr !important}.filter-main-grid{grid-template-columns:1fr !important}.table-wrap{max-height:none}}
+    @media(max-width:520px){.summary-grid{grid-template-columns:1fr !important}}
+
 </style>
   <!-- break time display v32: 4시간 이상 휴게시간/실근무시간 표시 -->
 </head>
@@ -926,6 +964,7 @@
         </table>
       </div>
       <div id="table-empty" class="empty" style="display:none;">표시할 기록이 없습니다.</div>
+      <div id="table-pager" class="table-pager step38" style="display:none;"></div>
     </section>
   </main>
 
@@ -1033,7 +1072,7 @@
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    const state = { allLogs:[], filteredLogs:[], userNames:[], activityNames:[], housingTypeNames:[], visitReasonNames:[], visitFieldConfig:{genders:[],housingTypes:[],visitReasons:[]}, charts:{}, editingId:null, queryMonth:"", queryAll:false };
+    const state = { allLogs:[], filteredLogs:[], userNames:[], activityNames:[], housingTypeNames:[], visitReasonNames:[], visitFieldConfig:{genders:[],housingTypes:[],visitReasons:[]}, charts:{}, editingId:null, queryMonth:"", queryAll:false, tablePage:1, tablePageSize:50 };
     /* step37: 방문목적은 7개로 고정하고, 기타는 활동목적이 아닌 유관기관업무지원 하위 체크리스트로만 관리 */
     const MAIN_VISIT_PURPOSES = ["대상자 상담","대상자 홍보 및 발굴","일상생활지원","정서지원(말벗)","유관기관업무지원","건강관리(스마케어 등)","지역복지자원연계"];
     const HEALTH_DETAIL_ITEMS = ["스마케어","신체활동(체조 등)","인지기능강화 활동"];
@@ -1976,9 +2015,10 @@
         return true;
       });
       state.filteredLogs=rows;
+      state.tablePage=1;
       renderActiveFilterChips();
       renderSummary();
-      renderCharts();
+      // step38: 차트 영역은 숨김 상태라 렌더링을 생략해 관리자페이지 속도를 개선합니다.
       renderTable();
       renderMemberList(); // 필터 변경 시 회원 목록도 갱신
       renderInactiveUsers();
@@ -2573,10 +2613,15 @@
     /* ── 테이블 ── */
     function getTypeBadgeClass(type){ if(type==="일과 시작") return "badge badge-start"; if(type==="일과 종료") return "badge badge-end"; if(type==="방문사례기록") return "badge badge-visit"; return "badge badge-activity"; }
     function renderTable(){
-      const rows=state.filteredLogs.slice();
+      const allRows=state.filteredLogs.slice();
+      const pageSize=Number(state.tablePageSize||50);
+      const maxPage=Math.max(1, Math.ceil(allRows.length/pageSize));
+      state.tablePage=Math.min(Math.max(1, Number(state.tablePage||1)), maxPage);
+      const startIdx=(state.tablePage-1)*pageSize;
+      const rows=allRows.slice(startIdx, startIdx+pageSize);
       const tbody=el("history-tbody"),empty=el("table-empty"),meta=el("table-meta");
-      meta.textContent=`${rows.length}건 표시 중 / 전체 ${state.allLogs.length}건`;
-      if(!rows.length){ tbody.innerHTML=""; empty.style.display="block"; return; }
+      meta.textContent=allRows.length?`${allRows.length}건 중 ${startIdx+1}-${startIdx+rows.length}건 표시 / 전체 ${state.allLogs.length}건`:`0건 표시 중 / 전체 ${state.allLogs.length}건`;
+      if(!allRows.length){ tbody.innerHTML=""; empty.style.display="block"; renderTablePager(0); return; }
       empty.style.display="none";
       tbody.innerHTML=rows.map(log=>{
         const dt=formatDateTime(getLogDateTime(log));
@@ -2652,6 +2697,28 @@
           </td>
         </tr>`;
       }).join("");
+      renderTablePager(allRows.length);
+    }
+
+    function renderTablePager(total){
+      const pager=el("table-pager");
+      if(!pager) return;
+      const pageSize=Number(state.tablePageSize||50);
+      const maxPage=Math.max(1, Math.ceil(total/pageSize));
+      if(!total || total<=pageSize){ pager.style.display="none"; pager.innerHTML=""; return; }
+      pager.style.display="flex";
+      const page=Number(state.tablePage||1);
+      pager.innerHTML=`
+        <button class="btn btn-soft btn-sm" type="button" ${page<=1?"disabled":""} onclick="goTablePage(${page-1})">이전</button>
+        <span class="table-pager-info">${page} / ${maxPage} 페이지 · ${pageSize}건씩 표시</span>
+        <button class="btn btn-soft btn-sm" type="button" ${page>=maxPage?"disabled":""} onclick="goTablePage(${page+1})">다음</button>
+      `;
+    }
+    function goTablePage(page){
+      state.tablePage=page;
+      renderTable();
+      const panel=document.querySelector('.table-panel');
+      if(panel) panel.scrollIntoView({behavior:'smooth',block:'start'});
     }
 
     /* ── 수정 모달 ── */
@@ -3094,6 +3161,59 @@
         console.warn('step15 layout reorder skipped', e);
       }
     }, 50);
+  });
+</script>
+
+
+<script>
+  // step38: 직관형 관리자 레이아웃 최종 정렬 및 가벼운 화면 구성
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      try{
+        var container=document.querySelector('main.container')||document.body;
+        var hero=document.querySelector('.hero');
+        var inactive=document.getElementById('inactive-user-panel');
+        var today=document.getElementById('today-active-panel');
+        var summary=document.querySelector('.summary-grid');
+        var month=document.getElementById('month-query-panel');
+        var filter=document.querySelector('.filter-redesign-panel');
+        var table=document.querySelector('.table-panel');
+        var manage=document.querySelector('.three-col');
+        var charts=document.querySelector('.charts-grid');
+        if(charts){ charts.style.display='none'; charts.setAttribute('aria-hidden','true'); }
+
+        var usageGrid=document.getElementById('step38-usage-grid');
+        if(!usageGrid && inactive && today){
+          usageGrid=document.createElement('section');
+          usageGrid.id='step38-usage-grid';
+          usageGrid.className='step38-usage-grid';
+          inactive.parentNode.insertBefore(usageGrid,inactive);
+          usageGrid.appendChild(inactive);
+          usageGrid.appendChild(today);
+        }
+        if(hero && usageGrid) hero.insertAdjacentElement('afterend', usageGrid);
+        if(usageGrid && summary) usageGrid.insertAdjacentElement('afterend', summary);
+        if(summary && month) summary.insertAdjacentElement('afterend', month);
+        if(month && filter) month.insertAdjacentElement('afterend', filter);
+        if(filter && table) filter.insertAdjacentElement('afterend', table);
+        if(table && manage){
+          var title=document.getElementById('step38-management-title');
+          if(!title){
+            title=document.createElement('div');
+            title.id='step38-management-title';
+            title.className='step38-management-title';
+            title.innerHTML='<div><strong>관리 설정</strong><br><span>회원, 방문목적, 대상자 정보, 세부 체크리스트는 필요할 때만 확인하세요.</span></div><button class="btn btn-soft btn-sm" type="button" id="step38-toggle-manage">설정 접기/열기</button>';
+          }
+          table.insertAdjacentElement('afterend', title);
+          title.insertAdjacentElement('afterend', manage);
+          var btn=document.getElementById('step38-toggle-manage');
+          if(btn && !btn.dataset.bound){
+            btn.dataset.bound='1';
+            btn.addEventListener('click',function(){ manage.style.display=(manage.style.display==='none')?'grid':'none'; });
+          }
+        }
+      }catch(e){ console.warn('step38 layout skipped',e); }
+    },250);
   });
 </script>
 
