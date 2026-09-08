@@ -660,7 +660,7 @@
         <div class="panel-head">
           <div>
             <h3 class="panel-title">세부 체크리스트 관리</h3>
-            <div class="panel-sub">지역복지자원연계와 유관기관업무지원 선택 시 나타나는 하위 체크리스트를 관리합니다.</div>
+            <div class="panel-sub">지역복지자원연계와 유관기관업무지원 하위 체크리스트를 관리합니다. 건강관리는 앱에서 3개 항목으로 고정 표시됩니다.</div>
           </div>
         </div>
         <div class="panel-body" style="max-height:420px;overflow-y:auto;">
@@ -708,6 +708,22 @@
               <input id="sub-item-input-3" type="text" placeholder="항목 추가 (예: 복지관 연계)"/>
               <button class="btn btn-soft btn-sm" type="button" onclick="addSubItem('유관기관업무지원', 3)">추가</button>
             </div>
+          </div>
+
+          <!-- 건강관리 세부 체크리스트: 고정 항목 -->
+          <div class="sub-group-block">
+            <div class="sub-group-header">
+              <div class="sub-group-title">
+                <span class="sub-group-dot dot-green"></span>
+                건강관리 세부 체크리스트 <span style="font-size:11px;color:var(--sub);font-weight:400;">고정 항목</span>
+              </div>
+            </div>
+            <div class="sub-item-list">
+              <div class="sub-item-row"><span class="sub-item-name">스마케어</span></div>
+              <div class="sub-item-row"><span class="sub-item-name">신체활동(체조 등)</span></div>
+              <div class="sub-item-row"><span class="sub-item-name">인지기능강화 활동</span></div>
+            </div>
+            <div class="helper" style="margin-top:8px;">※ 건강관리 세부항목은 앱에서 체크만 가능하며 직접 입력은 받지 않습니다.</div>
           </div>
 
         </div>
@@ -1018,6 +1034,9 @@
     const db = firebase.firestore();
 
     const state = { allLogs:[], filteredLogs:[], userNames:[], activityNames:[], housingTypeNames:[], visitReasonNames:[], visitFieldConfig:{genders:[],housingTypes:[],visitReasons:[]}, charts:{}, editingId:null, queryMonth:"", queryAll:false };
+    /* step37: 방문목적은 7개로 고정하고, 기타는 활동목적이 아닌 유관기관업무지원 하위 체크리스트로만 관리 */
+    const MAIN_VISIT_PURPOSES = ["대상자 상담","대상자 홍보 및 발굴","일상생활지원","정서지원(말벗)","유관기관업무지원","건강관리(스마케어 등)","지역복지자원연계"];
+    const HEALTH_DETAIL_ITEMS = ["스마케어","신체활동(체조 등)","인지기능강화 활동"];
 
     /* ── 유틸 ── */
     function el(id){ return document.getElementById(id); }
@@ -1108,6 +1127,13 @@
       if(log.visitPurposeDetails && Array.isArray(log.visitPurposeDetails.resourceLink)) a.push(...log.visitPurposeDetails.resourceLink);
       return uniqueSorted(a);
     }
+    function getHealthCareDetails(log){
+      const a=[];
+      a.push(...arrayFromValue(log.healthCareDetails));
+      a.push(...arrayFromValue(log.healthCareDetail));
+      if(log.visitPurposeDetails && Array.isArray(log.visitPurposeDetails.healthCare)) a.push(...log.visitPurposeDetails.healthCare);
+      return uniqueSorted(a);
+    }
     function getVisitPurposes(log){
       let arr=[];
       if(Array.isArray(log.activityPurposes)) arr.push(...log.activityPurposes);
@@ -1116,8 +1142,10 @@
       else if(normalizeText(log.visitPurposes)) arr.push(...String(log.visitPurposes).split(",").map(v=>v.trim()));
       if(normalizeText(log.visitPurposeEtc)) arr.push("기타: "+normalizeText(log.visitPurposeEtc));
       const agency = getAgencySupportDetails(log);
+      const health = getHealthCareDetails(log);
       const resource = getResourceLinkDetails(log);
       if(agency.length) arr.push(...agency.map(v=>"유관기관업무지원 - "+v));
+      if(health.length) arr.push(...health.map(v=>"건강관리 - "+v));
       if(resource.length) arr.push(...resource.map(v=>"자원연계 - "+v));
       if(normalizeText(log.purposeDetailText)) arr.push(...String(log.purposeDetailText).split("/").map(v=>v.trim()).filter(Boolean));
       return uniqueSorted(arr);
@@ -1457,13 +1485,16 @@
         if(Array.isArray(data.activities)) arr=data.activities;
         else if(Array.isArray(data.masterActivities)) arr=data.masterActivities;
         else if(Array.isArray(data.primaryActivities)) arr=data.primaryActivities;
-        // ✅ 순서 유지: uniqueSorted 대신 중복만 제거
-        return [...new Set(arr.map(normalizeText).filter(Boolean))];
+        // step37: 활동목적 관리에는 기존 로그의 기타가 다시 선택지로 올라오지 않도록 7개 목적만 유지
+        const cleaned = [...new Set(arr.map(normalizeText).filter(Boolean))].filter(v=>MAIN_VISIT_PURPOSES.includes(v));
+        const set = new Set(cleaned);
+        MAIN_VISIT_PURPOSES.forEach(v=>set.add(v));
+        return MAIN_VISIT_PURPOSES.filter(v=>set.has(v));
       }catch(err){ return []; }
     }
     async function saveActivityConfig(activities){
-      // ✅ 순서 유지: uniqueSorted 제거, 중복만 제거하고 순서 그대로 저장
-      const ordered=[...new Set(activities.map(normalizeText).filter(Boolean))];
+      // step37: 저장되는 활동목적은 7개 목적만 허용하고 기타는 저장하지 않음
+      const ordered=[...new Set(activities.map(normalizeText).filter(Boolean))].filter(v=>MAIN_VISIT_PURPOSES.includes(v));
       await db.collection("settings").doc("activityConfig").set({activities:ordered,masterActivities:ordered,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
     }
 
@@ -1599,7 +1630,7 @@
     const SUB_ITEM_DEFAULTS = {
       "지역복지자원연계1": ["떡, 빵", "후원금", "반찬지원"],
       "지역복지자원연계2": ["응급벨 신청","맞춤돌봄","요양등급신청","급여신청(기초생활수급대상자, 차상위계층 등)","통합돌봄","사전연명의료의향서 안내","생활 환경 개선"],
-      "유관기관업무지원":  ["IOT 대상자","재가 도시락 대상자 만족도조사 및 취약계층 발굴","응급안전안심서비스 대상자 만족도조사 및 취약계층 발굴","신입회원 복지관 안내 및 취약계층 발굴"],
+      "유관기관업무지원":  ["IOT 대상자","재가 도시락 대상자 만족도조사 및 취약계층 발굴","응급안전안심서비스 대상자 만족도조사 및 취약계층 발굴","신입회원 복지관 안내 및 취약계층 발굴","기타"],
     };
     state.subItems = {
       "지역복지자원연계1": [],
@@ -1615,6 +1646,7 @@
           state.subItems[key] = Array.isArray(data[key])
             ? [...new Set(data[key].map(normalizeText).filter(Boolean))]
             : [...SUB_ITEM_DEFAULTS[key]];
+          if(key === "유관기관업무지원" && !state.subItems[key].includes("기타")) state.subItems[key].push("기타");
         });
       }catch(err){
         Object.keys(state.subItems).forEach(key=>{ state.subItems[key]=[...SUB_ITEM_DEFAULTS[key]]; });
@@ -1709,7 +1741,8 @@
         ]);
         state.allLogs=logs;
         state.userNames=uniqueSorted([...usersFromConfig,...deriveUsersFromLogs(logs)]);
-        state.activityNames=[...new Set([...activitiesFromConfig,...logs.flatMap(getActivities)].map(normalizeText).filter(Boolean))];
+        state.activityNames=[...new Set([...activitiesFromConfig].map(normalizeText).filter(Boolean))];
+        state.filterActivityNames=[...new Set([...MAIN_VISIT_PURPOSES,...logs.flatMap(getActivities)].map(normalizeText).filter(Boolean))];
         state.visitFieldConfig=visitFieldConfig;
         state.housingTypeNames=[...(visitFieldConfig.housingTypes||[])];
         state.visitReasonNames=[...(visitFieldConfig.visitReasons||[])];
@@ -1718,7 +1751,7 @@
     }
     function buildSelects(){
       setSelectOptions(el("filter-user"),state.userNames,"전체");
-      setSelectOptions(el("filter-activity"),state.activityNames,"전체");
+      setSelectOptions(el("filter-activity"),state.filterActivityNames||state.activityNames,"전체");
       setSelectOptions(el("filter-housing-type"),state.housingTypeNames,"전체");
       setSelectOptions(el("filter-visit-reason"),state.visitReasonNames,"전체");
       setSelectOptions(el("edit-user"),state.userNames,"선택");
@@ -2739,14 +2772,16 @@
       const sub1    = [];   // 지역복지자원연계1 (현금·현물)
       const sub2    = [];   // 지역복지자원연계2 (복지자원)
       const sub3    = [];   // 유관기관업무지원
+      const sub4    = [];   // 건강관리
       activities.forEach(name=>{
         const n = normalizeText(name);
         if(n.startsWith("지역복지자원연계1 - "))      sub1.push(n.replace("지역복지자원연계1 - ",""));
         else if(n.startsWith("지역복지자원연계2 - ")) sub2.push(n.replace("지역복지자원연계2 - ",""));
         else if(n.startsWith("유관기관업무지원 - "))  sub3.push(n.replace("유관기관업무지원 - ",""));
+        else if(n.startsWith("건강관리 - "))  sub4.push(n.replace("건강관리 - ",""));
         else main.push(n);
       });
-      return { main, sub1, sub2, sub3 };
+      return { main, sub1, sub2, sub3, sub4 };
     }
 
     // step30: 엑셀에서는 활동목적을 1개 행씩 분리하여 나중에 활동목적별 필터/피벗이 가능하게 합니다.
@@ -2758,13 +2793,16 @@
       const sub1=[];
       const sub2=[];
       const sub3=[];
+      const sub4=[];
 
       acts.forEach(function(name){
         if(name.startsWith("지역복지자원연계1 - ")) sub1.push(name.replace("지역복지자원연계1 - ",""));
         else if(name.startsWith("지역복지자원연계2 - ")) sub2.push(name.replace("지역복지자원연계2 - ",""));
         else if(name.startsWith("유관기관업무지원 - ")) sub3.push(name.replace("유관기관업무지원 - ",""));
+        else if(name.startsWith("건강관리 - ")) sub4.push(name.replace("건강관리 - ",""));
         else if(name.startsWith("자원연계 - ")) sub2.push(name.replace("자원연계 - ",""));
         else if(name.includes("유관기관업무지원:")) sub3.push(name.replace("유관기관업무지원:","").trim());
+        else if(name.includes("건강관리:")) sub4.push(name.replace("건강관리:","").trim());
         else if(name.includes("지역복지자원연계1:")) sub1.push(name.replace("지역복지자원연계1:","").trim());
         else if(name.includes("지역복지자원연계2:")) sub2.push(name.replace("지역복지자원연계2:","").trim());
         else mainPurposes.push(name);
@@ -2776,17 +2814,21 @@
           purpose: purpose,
           sub1: purpose==="지역복지자원연계" ? uniqueSorted(sub1) : [],
           sub2: purpose==="지역복지자원연계" ? uniqueSorted(sub2) : [],
-          sub3: purpose==="유관기관업무지원" ? uniqueSorted(sub3) : []
+          sub3: purpose==="유관기관업무지원" ? uniqueSorted(sub3) : [],
+          sub4: purpose==="건강관리(스마케어 등)" ? uniqueSorted(sub4) : []
         });
       });
 
       if(!rows.length && (sub1.length||sub2.length)){
-        rows.push({purpose:"지역복지자원연계",sub1:uniqueSorted(sub1),sub2:uniqueSorted(sub2),sub3:[]});
+        rows.push({purpose:"지역복지자원연계",sub1:uniqueSorted(sub1),sub2:uniqueSorted(sub2),sub3:[],sub4:[]});
       }
       if(!rows.length && sub3.length){
-        rows.push({purpose:"유관기관업무지원",sub1:[],sub2:[],sub3:uniqueSorted(sub3)});
+        rows.push({purpose:"유관기관업무지원",sub1:[],sub2:[],sub3:uniqueSorted(sub3),sub4:[]});
       }
-      return rows.length ? rows : [{ purpose:acts.join(", "), sub1:uniqueSorted(sub1), sub2:uniqueSorted(sub2), sub3:uniqueSorted(sub3) }];
+      if(!rows.length && sub4.length){
+        rows.push({purpose:"건강관리(스마케어 등)",sub1:[],sub2:[],sub3:[],sub4:uniqueSorted(sub4)});
+      }
+      return rows.length ? rows : [{ purpose:acts.join(", "), sub1:uniqueSorted(sub1), sub2:uniqueSorted(sub2), sub3:uniqueSorted(sub3), sub4:uniqueSorted(sub4) }];
     }
 
     function buildExportRows(rows){
@@ -2812,6 +2854,7 @@
             "현금·현물": (purposeItem.sub1||[]).join(", "),
             "복지자원": (purposeItem.sub2||[]).join(", "),
             "유관기관 세부": (purposeItem.sub3||[]).join(", "),
+            "건강관리 세부": (purposeItem.sub4||[]).join(", "),
             "전체 선택 활동": acts.join(", "),
             "활동 내용": isVisit ? getVisitSummary(log) : "",
             "활동 시간(세션)": isActivityLog(log)
@@ -2850,6 +2893,7 @@
             "현금·현물": (purposeItem.sub1||[]).join(", "),
             "복지자원": (purposeItem.sub2||[]).join(", "),
             "유관기관 세부": (purposeItem.sub3||[]).join(", "),
+            "건강관리 세부": (purposeItem.sub4||[]).join(", "),
             "활동 내용": getVisitSummary(log)
           };
         });
